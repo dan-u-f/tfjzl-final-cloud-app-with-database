@@ -128,9 +128,9 @@ def submit(request, course_id):
     submitted_choice_ids = extract_answers(request)
 
     choices = Choice.objects.filter(
-        id__in=submitted_choice_ids,
-        question__lesson__course=course
-    )
+    id__in=submitted_choice_ids,
+    question__course=course)
+    
 
     submission = Submission.objects.create(
         enrollment=enrollment
@@ -168,60 +168,39 @@ def show_exam_result(request, course_id, submission_id):
         enrollment__course=course
     )
 
-    questions = Question.objects.filter(
-        lesson__course=course
-    ).distinct()
-
-    selected_choices = submission.choices.all()
-    selected_ids = set(
-        selected_choices.values_list('id', flat=True)
+    selected_ids = list(
+        submission.choices.values_list('id', flat=True)
     )
 
-    total_score = 0
-    possible_score = 0
+    questions = Question.objects.filter(course=course)
+
+    total = 0
+    possible = 0
     question_results = []
 
     for question in questions:
-        possible_score += question.grade
+        possible += question.grade
 
-        correct_ids = set(
-            Choice.objects.filter(
-                question=question,
-                is_correct=True
-            ).values_list('id', flat=True)
-        )
-
-        answer_ids = set(
-            Choice.objects.filter(
-                question=question,
-                id__in=selected_ids
-            ).values_list('id', flat=True)
-        )
-
-        is_correct = (
-            bool(correct_ids)
-            and answer_ids == correct_ids
-        )
+        is_correct = question.is_get_score(selected_ids)
 
         if is_correct:
-            total_score += question.grade
+            total += question.grade
 
         question_results.append({
             'question': question,
             'is_correct': is_correct
         })
 
-    score = (
-        total_score / possible_score * 100
-        if possible_score else 0
-    )
+    grade = (total / possible * 100) if possible else 0
 
     context = {
-    'course': course,
-    'submission': submission,
-    'question_results': question_results,
-    'grade': score,
-    'selected_choice_ids': list(selected_ids),
+        'course': course,
+        'submission': submission,
+        'grade': grade,
+        'selected_ids': selected_ids,
+        'selected_choice_ids': selected_ids,
+        'possible': possible,
+        'question_results': question_results
     }
 
     return render(
@@ -229,5 +208,3 @@ def show_exam_result(request, course_id, submission_id):
         'onlinecourse/exam_result_bootstrap.html',
         context
     )
-
-
